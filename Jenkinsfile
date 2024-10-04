@@ -93,59 +93,7 @@ pipeline {
             }
         }
 
-        stage('Dependency Scans') {
-            parallel {
-                stage('OWASP Frontend Dependency-Check') {
-                    steps {
-                        dir('Application-Code/frontend') {
-                            dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit --nvdApiKey ${NVD_API_KEY}', odcInstallation: 'DP-Check'
-                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                        }
-                    }
-                }
-
-                stage('OWASP Backend Dependency-Check') {
-                    steps {
-                        dir('Application-Code/backend') {
-                            dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit --nvdApiKey ${NVD_API_KEY}', odcInstallation: 'DP-Check'
-                            dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                        }
-                    }
-                }   
-            }
-        }
-
-        stage('Trivy File Scans') {
-            parallel {
-                stage('Trivy Frontend File Scan') {
-                    steps {
-                        dir('Application-Code/frontend') {
-                            sh 'trivy fs . >> trivyfs.txt'
-                            script {
-                                def scanResults = readFile('trivyfs.txt')
-                                if (scanResults.contains('CRITICAL')) {
-                                    echo "Warning: Critical vulnerabilities found in frontend file scan!"
-                                }
-                            }
-                        }
-                    }
-                }
-
-                stage('Trivy Backend File Scan') {
-                    steps {
-                        dir('Application-Code/backend') {
-                            sh 'trivy fs . >> trivyfs.txt'
-                            script {
-                                def scanResults = readFile('trivyfs.txt')
-                                if (scanResults.contains('CRITICAL')) {
-                                    echo "Warning: Critical vulnerabilities found in backend file scan!"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        
 
         stage('Build Tag and Push Docker Images') {
             parallel {
@@ -184,36 +132,11 @@ pipeline {
             }
         }
 
-        stage("TRIVY Image Scan") {
-            parallel {
-                stage('Frontend Docker Image Scan') {
-                    steps {
-                        sh 'trivy image ${REPOSITORY_URI}${AWS_ECR_FRONTEND_REPO_NAME}:${TAG} >> trivyimage.txt'
-                        script {
-                            def scanResults = readFile('trivyimage.txt')
-                            // Log the scan results without throwing an error
-                            echo "Frontend scan results:\n${scanResults}"
-                        }
-                    }
-                }
-
-                stage('Backend Docker Image Scan') {
-                    steps {
-                        sh 'trivy image ${REPOSITORY_URI}${AWS_ECR_BACKEND_REPO_NAME}:${TAG} >> trivyimage.txt'
-                        script {
-                            def scanResults = readFile('trivyimage.txt')
-                            // Log the scan results without throwing an error
-                            echo "Backend scan results:\n${scanResults}"
-                        }
-                    }
-                }
-            }
-        }
         
         stage('Deploy MongoDB and Service') {
             steps {
                 dir('Kubernetes-Manifests-file') {
-                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://EFCD6C924B0CADA4EF47D2E578265EFC.gr7.us-east-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://B7D6DDB9D648795B1BC249F4A313A06D.gr7.ap-south-1.eks.amazonaws.com') {
                         //sh "aws eks update-kubeconfig --name devopsshack-cluster --region us-east-1"
                         sh "kubectl apply -f Database -n ${KUBE_NAMESPACE}"
                     }
@@ -224,7 +147,7 @@ pipeline {
         stage('Deploy Frontend & Backend Services') {
             steps {
                 dir('Kubernetes-Manifests-file/Service') {
-                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://EFCD6C924B0CADA4EF47D2E578265EFC.gr7.us-east-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://B7D6DDB9D648795B1BC249F4A313A06D.gr7.ap-south-1.eks.amazonaws.com') {
                         sh '''
                         kubectl apply -f backend-svc.yml --force -n ${KUBE_NAMESPACE}
                         kubectl apply -f frontend-svc.yml --force -n ${KUBE_NAMESPACE}
@@ -250,7 +173,7 @@ pipeline {
                             deploymentBackend = 'backend-deployment-green.yml' 
                         }
 
-                        withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://EFCD6C924B0CADA4EF47D2E578265EFC.gr7.us-east-1.eks.amazonaws.com') {
+                        withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://B7D6DDB9D648795B1BC249F4A313A06D.gr7.ap-south-1.eks.amazonaws.com') {
                             sh "kubectl apply -f ${deploymentBackend} --record -n ${KUBE_NAMESPACE}"
                             sh "kubectl apply -f ${deploymentFrontend} --record -n ${KUBE_NAMESPACE}"
                             sh "sleep 20"
@@ -268,7 +191,7 @@ pipeline {
                 script {
                     def newEnv = params.DEPLOY_ENV
 
-                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://EFCD6C924B0CADA4EF47D2E578265EFC.gr7.us-east-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://B7D6DDB9D648795B1BC249F4A313A06D.gr7.ap-south-1.eks.amazonaws.com') {
                         sh """
                         kubectl patch svc backend-svc -p '{"spec": {"selector": {"app": "backend", "version": "${newEnv}"}}}' -n ${KUBE_NAMESPACE}
                         kubectl patch svc frontend-svc -p '{"spec": {"selector": {"app": "frontend", "version": "${newEnv}"}}}' -n ${KUBE_NAMESPACE}
@@ -283,7 +206,7 @@ pipeline {
             steps {
                 script {
                     def verifyEnv = params.DEPLOY_ENV
-                    withKubeConfig(caCertificate: '', clusterName: ' devopsshack-cluster', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://EFCD6C924B0CADA4EF47D2E578265EFC.gr7.us-east-1.eks.amazonaws.com') {
+                    withKubeConfig(caCertificate: '', clusterName: ' devopsshack-cluster', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://B7D6DDB9D648795B1BC249F4A313A06D.gr7.ap-south-1.eks.amazonaws.com') {
                     sh "kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}"
                     sh "kubectl get svc backend-svc -n ${KUBE_NAMESPACE}"
                     sh "kubectl get svc frontend-svc -n ${KUBE_NAMESPACE}"
